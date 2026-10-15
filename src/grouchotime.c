@@ -847,35 +847,54 @@ static void cues(double t0, double t1)
     if (e1 < 0 && gummo_at(t1, &gq1, &f1) && peeker(t1) == PEEK_GUMMO && f1 && gummo_at(t0, &gq0, &f0) && !f0) play(&honk2, 0.25);
 }
 
-/* Where Harpo's eyes are looking (-1 .. 1 across, -1 .. 1 up and down) and how far his
- * lids are down (0 .. 1). They are never still for long: every so often (on a beat of
- * EYE_BEAT seconds, at random) they dart somewhere new, to one side, the other, or at
- * us, often with his lids half down in a glare; now and then they slide there slowly
- * instead, which is creepier. They go to Raquel Torres, wide open, and roll round when
- * his head comes up on its spring. */
+/* What Harpo's eyes are doing: where they look (-1 .. 1 across, -1 .. 1 up and down),
+ * how far his lids are down (0 .. 1), how crossed they are (0 .. 1) and how far they
+ * have popped open (1 = as usual). They are never still for long. Every so often (on a
+ * beat of EYE_BEAT seconds, at random) they do something new: mostly a dart, to one
+ * side, the other, or at us, often with his lids half down in a glare; sometimes a slow
+ * creepy slide; sometimes a roll, right round; sometimes they pop wide and stare at us,
+ * glazed; and sometimes they cross, as in his "gookie" face. They go to Raquel Torres,
+ * wide open, and roll round when his head comes up on its spring. */
 #define EYE_BEAT 0.35
-static void eye_target(long k, double *x, double *y, double *l)
+enum { EYE_DART, EYE_SLIDE, EYE_ROLL, EYE_POP, EYE_CROSS };
+typedef struct { double x, y, lid, cross, pop; } HarpoEyes;
+static int eye_move(long k)
+{
+    double a = hash01((uint64_t)k * 7 + 5);
+    return a < 0.6 ? EYE_DART : a < 0.72 ? EYE_SLIDE : a < 0.82 ? EYE_ROLL : a < 0.91 ? EYE_POP : EYE_CROSS;
+}
+static HarpoEyes eye_target(long k)
 {
     double a = hash01((uint64_t)k * 3 + 101), b = hash01((uint64_t)k * 3 + 102), c = hash01((uint64_t)k * 3 + 103);
-    *x = a < 0.3 ? -1 : a < 0.6 ? 1 : (a - 0.6) / 0.4 * 1.4 - 0.7;
-    *y = (b - 0.35) * 0.7;
-    *l = c < 0.45 ? 0.38 : 0;
+    HarpoEyes e = {a < 0.3 ? -1 : a < 0.6 ? 1 : (a - 0.6) / 0.4 * 1.4 - 0.7, (b - 0.35) * 0.7, c < 0.45 ? 0.38 : 0, 0, 1};
+    switch (eye_move(k)) {
+    case EYE_POP: e = (HarpoEyes){0, 0, 0, 0, 1.3}; break;              /* wide, glazed, at us */
+    case EYE_CROSS: e = (HarpoEyes){0, 0.1, 0.15, 1, 1}; break;
+    case EYE_ROLL: e.lid = 0; break;
+    }
+    return e;
 }
 static int eyes_move(long k) { return hash01((uint64_t)k * 5 + 77) < 0.4; }
-static void harpo_eyes(int ev, double ju, double *lx, double *ly, double *lid)
+static HarpoEyes harpo_eyes(int ev, double ju)
 {
     long k = (long)floor(T / EYE_BEAT), k1 = k, k0;
     while (k1 > k - 24 && !eyes_move(k1)) k1--;              /* when they last moved */
     for (k0 = k1 - 1; k0 > k1 - 24 && !eyes_move(k0); k0--) ;
-    double x0, y0, l0, x1, y1, l1;
-    eye_target(k0, &x0, &y0, &l0);
-    eye_target(k1, &x1, &y1, &l1);
-    double since = T - k1 * EYE_BEAT, slow = hash01((uint64_t)k1 * 7 + 5) < 0.15 ? 0.9 : 0.07;
-    double q = ease(fmin(since / slow, 1)), ql = ease(fmin(since / 0.15, 1));
-    double x = x0 + (x1 - x0) * q, y = y0 + (y1 - y0) * q, l = l0 + (l1 - l0) * ql;
-    if (ev == EV_TORRES && ju > 0.1 && ju < 0.9) { x = -1; y = 0.2; l = 0; }
-    if (ev == EV_HARPO && ju < 0.85) { x = cos(ju * 20); y = sin(ju * 20); l = 0; }
-    *lx = x; *ly = y; *lid = l;
+    HarpoEyes a = eye_target(k0), b = eye_target(k1), e;
+    int move = eye_move(k1);
+    double since = T - k1 * EYE_BEAT;
+    double q = ease(fmin(since / (move == EYE_SLIDE ? 0.9 : move == EYE_DART ? 0.07 : 0.2), 1));
+    double ql = ease(fmin(since / 0.15, 1));
+    e.x = a.x + (b.x - a.x) * q; e.y = a.y + (b.y - a.y) * q;
+    e.lid = a.lid + (b.lid - a.lid) * ql; e.cross = a.cross + (b.cross - a.cross) * ql;
+    e.pop = a.pop + (b.pop - a.pop) * ql;
+    if (move == EYE_ROLL && since < 1.3) {                   /* right round, up first */
+        double r = ease(since / 1.3) * 2 * M_PI, f = fmin(1, since / 0.15);
+        e.x = e.x * (1 - f) + f * sin(r) * 0.9; e.y = e.y * (1 - f) - f * cos(r) * 0.9;
+    }
+    if (ev == EV_TORRES && ju > 0.1 && ju < 0.9) e = (HarpoEyes){-1, 0.2, 0, 0, 1.15};
+    if (ev == EV_HARPO && ju < 0.85) e = (HarpoEyes){cos(ju * 20), sin(ju * 20), 0, 0, 1};
+    return e;
 }
 
 static void draw_scene(SDL_Renderer *r, int w, int h)
@@ -969,28 +988,38 @@ static void draw_scene(SDL_Renderer *r, int w, int h)
             flush(ren);
             hy = top; tilt = sin(ju * 25) * 12;
         }
-        double look_x, look_y, lid;
-        harpo_eyes(ev, ju, &look_x, &look_y, &lid);
-        double hsc = ms * 0.56, ra = tilt * M_PI / 180;
+        HarpoEyes he = harpo_eyes(ev, ju);
+        double hsc = ms * 0.56, ra = tilt * M_PI / 180, at[2][4];
         for (int e = 0; e < 2; e++) {
             double ex = e ? HARPO_EYE_R_X : HARPO_EYE_L_X, ey = e ? HARPO_EYE_R_Y : HARPO_EYE_L_Y;
             double rx = e ? HARPO_EYE_R_RX : HARPO_EYE_L_RX, ry = e ? HARPO_EYE_R_RY : HARPO_EYE_L_RY;
             double dx = (ex - HARPO_CHIN_X) * hsc, dy = (ey - HARPO_CHIN_Y) * hsc;
             double x = hx + dx * cos(ra) - dy * sin(ra), y = hy + dx * sin(ra) + dy * cos(ra);
-            disc(x, y, rx * hsc * 1.1, col((Rgb){236, 228, 210}, 1), col((Rgb){236, 228, 210}, 1));
+            disc(x, y, rx * hsc * 1.1 * he.pop, col((Rgb){236, 228, 210}, 1), col((Rgb){236, 228, 210}, 1));
             flush(ren);
             int ir = e ? SP_harpo_iris_r : SP_harpo_iris_l;
-            double ox = look_x * rx * 0.48, oy = look_y * ry * 0.4;
+            double ox = he.x * rx * 0.48 + (e ? -1 : 1) * he.cross * rx * 0.62, oy = he.y * ry * 0.4;
             put(ir, x + (ox * cos(ra) - oy * sin(ra)) * hsc, y + (ox * sin(ra) + oy * cos(ra)) * hsc,
                 sprite[ir].w / 2.0, sprite[ir].h / 2.0, hsc, tilt, 1, 0);
-            if (lid > 0.01) {                                /* his lids, coming down */
-                double R = rx * hsc * 3, d = R + ry * hsc * (1 - 2 * lid);
+            at[e][0] = x; at[e][1] = y; at[e][2] = (ox * cos(ra) - oy * sin(ra)) * hsc; at[e][3] = ry;
+            if (he.lid > 0.01) {                             /* his lids, coming down */
+                double R = rx * hsc * 3, d = R + ry * hsc * (1 - 2 * he.lid);
                 flush(ren);
                 disc(x + d * sin(ra), y - d * cos(ra), R, col((Rgb){140, 129, 112}, 1), col((Rgb){140, 129, 112}, 1));
             }
         }
         flush(ren);
         put(SP_harpo, hx, hy, HARPO_CHIN_X, HARPO_CHIN_Y, hsc, tilt, 1, 0);
+        if (he.pop > 1.02) {                                 /* popping out of his face */
+            double grow = (he.pop - 1) / 0.3;
+            for (int e = 0; e < 2; e++) {
+                int ir = e ? SP_harpo_iris_r : SP_harpo_iris_l;
+                flush(ren);
+                disc(at[e][0], at[e][1], at[e][3] * hsc * (1 + 1.3 * grow), col((Rgb){236, 228, 210}, 1), col((Rgb){236, 228, 210}, 1));
+                flush(ren);
+                put(ir, at[e][0] + at[e][2], at[e][1], sprite[ir].w / 2.0, sprite[ir].h / 2.0, hsc * (1 + 0.25 * grow), tilt, 1, 0);
+            }
+        }
     }
 
     /* his eyes, behind the holes in his head: paper whites, and the irises going to
