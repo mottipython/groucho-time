@@ -18,6 +18,7 @@ Groucho Marx's head pasted on. Runs on Linux, Windows and macOS. One of the
   Cocoanuts* to *A Day at the Races*, each with the film it is from.
 - **Harpo is the sphinx**, silent, and now and then his head goes over to one side.
 - **Now and then** Gummo, Chico or Zeppo peeks out from behind the clock.
+- **About every minute and a half** something happens: his head spins round and comes up as Zeppo's; Margaret Dumont sweeps in and he waggles his eyebrows at her; Raquel Torres glides past and his head floats off after her in a cloud of paper hearts; the top of his head opens and Chico pops out on a spring; or Harpo's head goes up out of the sphinx on a spring.
 
 Everything moves the way paper cut-outs do: in jerks, on twelve frames a second.
 
@@ -37,6 +38,10 @@ All in the public domain.
   Library of Congress ([Wikimedia Commons](https://commons.wikimedia.org/wiki/File:Groucho_Marx.jpg)).
 - **Chico, Harpo and Zeppo**: the four Marx Brothers, 1931
   ([Wikimedia Commons](https://commons.wikimedia.org/wiki/File:Marx_Brothers_1931.jpg)).
+- **Margaret Dumont**: *The Cocoanuts* (1929)
+  ([Wikimedia Commons](https://commons.wikimedia.org/wiki/File:Margaret_Dumont_in_The_Cocoanuts_(1929).jpg)).
+- **Raquel Torres**: a 1930s studio portrait
+  ([Wikimedia Commons](https://commons.wikimedia.org/wiki/File:Raquel_Torres_(1930s)_(49429156891).jpg)).
 - **Gummo**: "Four Marx Brothers", *The Times-Democrat*, New Orleans, 11 May 1913
   ([Wikimedia Commons](https://commons.wikimedia.org/wiki/File:Four_Marx_Bros_Mr_Green_Reception_New_Orleans_Times-Democrat_11_May_1913.png)).
 

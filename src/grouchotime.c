@@ -397,11 +397,33 @@ static void put(int which, double x, double y, double ax, double ay, double scal
 }
 /* a point of the monument picture, and of the photograph (by where his chin goes), on the screen */
 static void on_mon(double px, double py, double *x, double *y) { *x = mx0 + px * ms; *y = my0 + py * ms; }
+static double head_rot, head_dx, head_dy;   /* the whole head turned about his chin, and moved */
 static void on_photo(double px, double py, double *x, double *y)
 {
-    double cx, cy;
+    double cx, cy, a = head_rot * M_PI / 180;
     on_mon(CHIN_X, CHIN_Y, &cx, &cy);
-    *x = cx + (px - PHOTO_CHIN_X) * hs; *y = cy + (py - PHOTO_CHIN_Y) * hs;
+    double dx = (px - PHOTO_CHIN_X) * hs, dy = (py - PHOTO_CHIN_Y) * hs;
+    *x = cx + dx * cos(a) - dy * sin(a) + head_dx; *y = cy + dx * sin(a) + dy * cos(a) + head_dy;
+}
+
+/* ---- the business in between ----
+ * About every minute and a half, away from the quarter hours, someone does something
+ * for a moment: his head spins round and comes up as Zeppo's, and back; Margaret
+ * Dumont sweeps in and he makes eyes at her; Raquel Torres glides by and his head
+ * floats off after her; the top of his head opens and Chico pops out on a spring; or
+ * Harpo's head goes up out of the sphinx on a spring. */
+enum { EV_ZEPPO, EV_DUMONT, EV_TORRES, EV_CHICO, EV_HARPO, NEV };
+static const double EV_LEN[NEV] = {2.6, 4.2, 4.6, 2.8, 2.4};
+#define EV_EVERY 90.0
+static int event_at(double t, double *u)
+{
+    double slot = floor(t / EV_EVERY), s = t - slot * EV_EVERY;
+    int kind = (int)(hash01((uint64_t)slot * 13 + 1) * NEV) % NEV;
+    double s0 = 20 + hash01((uint64_t)slot * 13 + 2) * 50;
+    if (s < s0 || s > s0 + EV_LEN[kind]) return -1;
+    if (fmod(t, QUARTER) < CARD_LEN + 4) return -1;          /* not while he's saying something */
+    *u = (s - s0) / EV_LEN[kind];
+    return kind;
 }
 
 /* a clock hand as an engraver draws one: a long tapering spade */
@@ -440,8 +462,11 @@ static void saying_label(const Saying *sy, double x, double y, double up)
         p = *e ? e + 1 : e;
     }
     n++;
-    double w = fmin(sw * 0.36, sh * 0.62), s = (w - unit * 6) / (most * 6.2);
-    double lh = s * 10, fsz = s * 0.55, h = lh * n + s * 6 + fsz * 9;
+    /* sized to the screen, and the words sized to fit inside the printer's rule */
+    double w = fmin(sw * 0.40, sh * 0.70), pad = unit * 2.6;
+    double s = (w - 2 * pad) / text_width(lines[0][0] ? "MMMMMMMMMMMMMMMMMMMMMM" : "M", 1.0) * (22.0 / fmax(most, 12));
+    s = fmin(s, (w - 2 * pad) / (most * 6.2));
+    double lh = s * 9.5, fsz = fmin(fmax(s * 0.55, unit * 0.45), (w - 2 * pad) / text_width(sy->film, 1.0)), h = 2 * pad + lh * (n - 1) + s * 6 + fsz * 9;
     double rest = fmax(unit * 2, y - h - sh * 0.10);        /* where it comes to rest: never off the top */
     double top = y + (rest - y) * up - h * fmin(up * 3, 1) * (1 - up), cx = fmin(fmax(x, w / 2 + unit * 2), sw - w / 2 - unit * 2);
     SDL_Color ink = col((Rgb){26, 20, 18}, 1), red = col((Rgb){168, 34, 30}, 1);
@@ -457,8 +482,8 @@ static void saying_label(const Saying *sy, double x, double y, double up)
         double lw = unit * (i ? 0.18 : 0.45);
         line(x0, y0, x1, y0, lw, red); line(x1, y0, x1, y1, lw, red); line(x1, y1, x0, y1, lw, red); line(x0, y1, x0, y0, lw, red);
     }
-    for (int i = 0; i < n; i++) text(lines[i], cx, top + s * 4 + i * lh, s, 1.1, ink);
-    text(sy->film, cx, top + s * 4 + n * lh + fsz * 1.2, fsz, 1.0, red);
+    for (int i = 0; i < n; i++) text(lines[i], cx, top + pad + i * lh, s, 1.1, ink);
+    text(sy->film, cx, top + pad + (n - 1) * lh + s * 6 + fsz * 2.5, fsz, 1.0, red);
     flush(ren);
 }
 
@@ -480,8 +505,27 @@ static void draw_scene(SDL_Renderer *r, int w, int h)
     flush(ren);
 
     double hp = fmod(T, 3600), mp = fmod(T, 60), qp = fmod(T, QUARTER);
+    double eu = 0;
+    int ev = event_at(T, &eu);
+    double ju = jerky(eu * EV_LEN[ev < 0 ? 0 : ev]) / EV_LEN[ev < 0 ? 0 : ev];
+    head_rot = head_dx = head_dy = 0;
+    int zeppo_face = 0;
+    if (ev == EV_ZEPPO) {                                  /* round once, Zeppo; round again, Groucho */
+        if (ju < 0.3) head_rot = 360 * ease(ju / 0.3);
+        else if (ju < 0.7) zeppo_face = 1;
+        else head_rot = 360 * ease((ju - 0.7) / 0.3);
+        zeppo_face |= (ju > 0.15 && ju < 0.3) || (ju >= 0.7 && ju < 0.85);
+    }
+    double smitten = 0;
+    if (ev == EV_TORRES) {                                 /* his head floats up after her */
+        smitten = ramp(ju, 0.25, 0.4) * (1 - ramp(ju, 0.78, 0.92));
+        head_dy = -sh * 0.10 * smitten - sh * 0.02 * sin(ju * 30) * smitten;
+        head_dx = -sw * 0.05 * smitten;
+        head_rot = -12 * smitten;
+    }
     double gq; int gframe;
     int gummo = gummo_at(T, &gq, &gframe);
+    if (ev >= 0) gummo = 0;                                 /* one thing at a time */
 
     /* the monument: Father Time and his clock fill the screen, and the plinth goes
      * on down out of sight */
@@ -523,6 +567,16 @@ static void draw_scene(SDL_Renderer *r, int w, int h)
         if (tt > 17) tilt = sin(M_PI * jerky(tt - 17) / 6) * 14;
         if (gummo) tilt = -10 * gq;                          /* and towards whoever has come */
         on_mon(SPHINX_CHIN_X, SPHINX_CHIN_Y, &hx, &hy);
+        if (ev == EV_HARPO) {                                /* up on a spring, and down again */
+            double lift = ju < 0.3 ? ju / 0.3 * 1.15 : ju < 0.8 ? 1 + 0.15 * cos((ju - 0.3) * 30) * exp(-(ju - 0.3) * 6) : (1 - ju) / 0.2;
+            double top = hy - sh * 0.22 * lift;
+            for (int i = 0; i < 10; i++) {
+                double ya = hy + (top - hy) * i / 10.0, yb = hy + (top - hy) * (i + 1) / 10.0;
+                line(hx + (i & 1 ? -1 : 1) * unit, ya, hx + (i & 1 ? 1 : -1) * unit, yb, unit * 0.3, col((Rgb){90, 84, 78}, 1));
+            }
+            flush(ren);
+            hy = top; tilt = sin(ju * 25) * 12;
+        }
         put(SP_harpo, hx, hy, HARPO_CHIN_X, HARPO_CHIN_Y, ms * 0.56, tilt, 1, 0);
     }
 
@@ -539,22 +593,36 @@ static void draw_scene(SDL_Renderer *r, int w, int h)
         disc(x, y, erx * hs * 1.15, col((Rgb){236, 228, 210}, 1), col((Rgb){236, 228, 210}, 1));
         flush(ren);
         int ir = e ? SP_iris_r : SP_iris_l;
-        put(ir, x + look * erx * hs * 0.55, y, sprite[ir].w / 2.0, sprite[ir].h / 2.0, hs * 1.05, 0, 1, 0);
+        double ox = look * erx * 0.55, oy = 0;
+        if (ev == EV_DUMONT && ju > 0.2 && ju < 0.85) ox = erx * 0.6;        /* at her */
+        if (ev == EV_TORRES && ju > 0.1 && ju < 0.9) ox = -erx * 0.6;
         (void)ery;
+        double ra = head_rot * M_PI / 180;
+        put(ir, x + (ox * cos(ra) - oy * sin(ra)) * hs, y + (ox * sin(ra) + oy * cos(ra)) * hs,
+            sprite[ir].w / 2.0, sprite[ir].h / 2.0, hs * 1.05, head_rot, 1, 0);
     }
 
     /* the head */
     double x, y;
     on_photo(HEAD_X, HEAD_Y, &x, &y);
-    put(SP_head, x, y, 0, 0, hs, 0, 1, 0);
+    if (zeppo_face) {                                      /* Zeppo, where Groucho was */
+        double zx, zy, zs = hs * sprite[SP_head].w / sprite[SP_zeppo].w * 0.9;
+        on_photo(PHOTO_CHIN_X, PHOTO_CHIN_Y - 40, &zx, &zy);
+        put(SP_zeppo, zx, zy, ZEPPO_CHIN_X, ZEPPO_CHIN_Y, zs, head_rot, 1, 0);
+    } else
+        put(SP_head, x, y, 0, 0, hs, head_rot, 1, 0);
 
     /* the eyebrows: up and down as each minute begins, and up for Gummo */
     double wag = mp < 1.5 ? fabs(sin(jerky(mp) * M_PI * 3)) * (1 - mp / 1.5) : 0;
+    if (ev == EV_DUMONT && ju > 0.25 && ju < 0.85) wag = fabs(sin(jerky(ju * 4.2) * M_PI * 2.5));
+    if (smitten > 0) wag = fmax(wag, smitten * fabs(sin(jerky(anim_t) * 9)));
     double lift = wag * 22 + (gummo ? 14 * gq : 0);
+    if (!zeppo_face) {
     on_photo(BROW_L_X, BROW_L_Y - lift, &x, &y);
-    put(SP_brow_l, x, y, 0, 0, hs, -wag * 6, 1, 0);
+    put(SP_brow_l, x, y, 0, 0, hs, head_rot - wag * 6, 1, 0);
     on_photo(BROW_R_X, BROW_R_Y - lift, &x, &y);
-    put(SP_brow_r, x, y, 0, 0, hs, wag * 6, 1, 0);
+    put(SP_brow_r, x, y, 0, 0, hs, head_rot + wag * 6, 1, 0);
+    }
 
     /* every quarter of an hour the top of his head flips open on its hinge and up
      * comes a saying, on a spring */
@@ -564,6 +632,12 @@ static void draw_scene(SDL_Renderer *r, int w, int h)
         up = ramp(qp, 0.7, 1.3) * (1 - ramp(qp, CARD_LEN + 0.6, CARD_LEN + 1.4));
         open = jerky(open * 3) / 3; up = jerky(up * 4) / 4;
         up *= 1 + 0.15 * sin(fmin(qp - 1.3, 2) * 9) * exp(-fmax(qp - 1.3, 0) * 2.5) * (qp > 1.3);
+    }
+    double chico_up = 0;
+    if (ev == EV_CHICO) {                                  /* the lid opens and up pops Chico */
+        open = ramp(ju, 0, 0.15) * (1 - ramp(ju, 0.85, 1));
+        chico_up = ramp(ju, 0.15, 0.3) * (1 - ramp(ju, 0.7, 0.85));
+        chico_up *= 1 + 0.12 * sin((ju - 0.3) * 40) * exp(-fmax(ju - 0.3, 0) * 8) * (ju > 0.3);
     }
     if (open > 0) {                                        /* the inside of his head: a dark slot along the cut */
         double ax, ay, bx, by;
@@ -579,8 +653,46 @@ static void draw_scene(SDL_Renderer *r, int w, int h)
         for (int i = 0; i < n; i++) { ib[ni++] = k; ib[ni++] = k + 1 + i; ib[ni++] = k + 1 + (i + 1) % n; }
         flush(ren);
     }
+    if (chico_up > 0) {
+        double cx, cy, top, cs = hs * sprite[SP_head].w / sprite[SP_chico].w * 0.75;
+        on_photo(430, 205, &cx, &cy);
+        top = cy - sh * 0.09 * chico_up;
+        for (int i = 0; i < 8; i++) {
+            double ya = cy + (top - cy) * i / 8.0, yb = cy + (top - cy) * (i + 1) / 8.0;
+            line(cx + (i & 1 ? -1 : 1) * unit * 1.2, ya, cx + (i & 1 ? 1 : -1) * unit * 1.2, yb, unit * 0.32, col((Rgb){90, 84, 78}, 1));
+        }
+        flush(ren);
+        put(SP_chico, cx, top, CHICO_CHIN_X, CHICO_CHIN_Y, cs, sin(ju * 30) * 10, 1, 0);
+    }
     on_photo(HINGE_X, HINGE_Y, &x, &y);
-    put(SP_flap, x, y, HINGE_X - FLAP_X, HINGE_Y - FLAP_Y, hs, -open * 115, 1, 0);
+    if (!zeppo_face) put(SP_flap, x, y, HINGE_X - FLAP_X, HINGE_Y - FLAP_Y, hs, head_rot - open * 115, 1, 0);
+
+    /* the ladies, sweeping in and out in front of everything, jerkily */
+    if (ev == EV_DUMONT) {
+        double q = jerky(ramp(ju, 0, 0.2) * 4) / 4 * (1 - jerky(ramp(ju, 0.85, 1) * 4) / 4);
+        double ds = sh * 0.80 / sprite[SP_dumont].h, wdt = sprite[SP_dumont].w * ds;
+        put(SP_dumont, sw - wdt * 0.92 * q, sh - sprite[SP_dumont].h * ds * 0.95, 0, 0, ds, -4 * q + 3 * sin(ju * 12) * q, 1, 0);
+    }
+    if (ev == EV_TORRES) {
+        double q = jerky(ju * EV_LEN[EV_TORRES] * 3) / (EV_LEN[EV_TORRES] * 3);
+        double ts = sh * 0.72 / sprite[SP_torres].h, wdt = sprite[SP_torres].w * ts;
+        double x0 = -wdt, x1 = sw * 0.42;
+        double px = q < 0.45 ? x0 + (x1 - x0) * ease(q / 0.45) : q < 0.6 ? x1 : x1 - (x1 - x0) * ease((q - 0.6) / 0.4);
+        put(SP_torres, px, sh - sprite[SP_torres].h * ts * 0.95, 0, 0, ts, 2 * sin(q * 20), 1, 0);
+        if (q > 0.35 && q < 0.75)                          /* a heart or two, cut from red paper */
+            for (int k = 0; k < 3; k++) {
+                double hx, hy, hq = fmod(q * 3 + k * 0.33, 1);
+                on_photo(450 + k * 60, 120, &hx, &hy);
+                hy -= hq * sh * 0.15;
+                double rr = unit * 1.6;
+                SDL_Color red = col((Rgb){190, 30, 40}, 1 - hq);
+                disc(hx - rr * 0.5, hy, rr * 0.62, red, red); disc(hx + rr * 0.5, hy, rr * 0.62, red, red);
+                vb_need(3, 3); int kk = nv;
+                vert(hx - rr * 1.08, hy + rr * 0.2, red); vert(hx + rr * 1.08, hy + rr * 0.2, red); vert(hx, hy + rr * 1.5, red);
+                ib[ni++] = kk; ib[ni++] = kk + 1; ib[ni++] = kk + 2;
+                flush(ren);
+            }
+    }
     if (up > 0) {
         double cx, cy;
         on_photo(430, 205, &cx, &cy);

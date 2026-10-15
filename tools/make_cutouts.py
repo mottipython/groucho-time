@@ -56,7 +56,21 @@ BROTHERS = {
                (1660, 2740), (1650, 2880), (1620, 2990), (1580, 3100), (1520, 3190), (1420, 3240),
                (1320, 3220), (1240, 3140), (1190, 3020), (1160, 2880)], (1420, 3240)),
 }
-SPHINX_CHIN = (1345, 955)                  # where Harpo's chin goes, on the monument picture
+SPHINX_CHIN = (1345, 955)
+
+# ---- the ladies, for the business in between: Raquel Torres (1930s studio
+# portrait) and Margaret Dumont (The Cocoanuts, 1929), both public domain ----
+LADIES = {
+    "torres": ("raquel-torres-1930s.jpg", [(300, 95), (350, 82), (410, 90), (455, 130), (470, 190), (465, 260),
+               (445, 300), (500, 330), (560, 350), (620, 420), (640, 520), (640, 640), (600, 690), (550, 690),
+               (520, 700), (520, 840), (190, 840), (200, 700), (110, 690), (70, 640), (90, 560), (140, 450),
+               (200, 380), (255, 340), (260, 300), (250, 250), (255, 180), (270, 130)]),
+    "dumont": ("margaret-dumont-cocoanuts-1929.jpg", [(200, 90), (250, 40), (330, 25), (420, 40), (500, 110),
+               (560, 200), (600, 280), (560, 300), (480, 320), (440, 330), (430, 380), (470, 410), (530, 430),
+               (575, 480), (590, 560), (600, 700), (600, 860), (150, 860), (140, 720), (60, 720), (40, 630),
+               (80, 580), (130, 555), (170, 560), (160, 500), (190, 450), (240, 420), (270, 410), (230, 400),
+               (160, 370), (100, 330), (90, 280), (130, 200), (180, 130)]),
+}                  # where Harpo's chin goes, on the monument picture
 
 # ---- Gummo, in the 1913 newspaper page's pixels ----
 GUMMO = [(1430, 880), (1500, 858), (1600, 855), (1680, 878), (1740, 928), (1766, 1000), (1762, 1080),
@@ -263,6 +277,17 @@ def brothers(defs):
         defs[name.upper() + "_CHIN"] = ((chin[0] - a) / 2 + EDGE + 1, (chin[1] - b) / 2 + EDGE + 1)
     defs["SPHINX_CHIN"] = SPHINX_CHIN
 
+def ladies(defs):
+    for name, (f, pts) in LADIES.items():
+        im = ImageOps.autocontrast(Image.open(f"{SRC}/{f}").convert("L"), cutoff=0.5)
+        g = np.asarray(im).astype(float)
+        rgb = np.dstack([np.clip(g + 8, 0, 255), np.clip(g * 0.96 + 4, 0, 255), np.clip(g * 0.86, 0, 255)]).astype(np.uint8)
+        W, H = im.size
+        m = poly_mask((W, H), pts)
+        ys, xs = np.nonzero(m)
+        a, b, c, d = xs.min(), ys.min(), xs.max() + 1, ys.max() + 1
+        save(with_edge(pad(np.dstack([rgb, (m * 255).astype(np.uint8)])[b:d, a:c], EDGE + 1)), name)
+
 def write_lists(defs):
     lines = ["/* Made by tools/make_cutouts.py: where the pieces go, in their pictures' pixels. */"]
     for k, v in defs.items():
@@ -288,6 +313,7 @@ def main():
     groucho(defs)
     gummo(defs)
     brothers(defs)
+    ladies(defs)
     write_lists(defs)
 
 if __name__ == "__main__":
