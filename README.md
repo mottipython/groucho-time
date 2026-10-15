@@ -47,6 +47,13 @@ All in the public domain.
 
 `tools/make_cutouts.py` cuts them out along traced outlines, with a white paper edge.
 
+## Where the sounds come from
+
+Most of the noises are made in code. Two are recordings: the wolf whistle is
+[Wolf whistle.ogg](https://commons.wikimedia.org/wiki/File:Wolf_whistle.ogg)
+(Wikimedia Commons, public domain), and Harpo's horn is from public-domain media,
+as in [Duck Soup](https://github.com/mottipython/duck-soup).
+
 ## Running it yourself
 
     groucho-time                  full screen on every display

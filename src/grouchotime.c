@@ -791,21 +791,19 @@ static int write_wav(double secs)
 }
 
 /* ---- Groucho Time's noises: a cartoon's ---- */
-ART(s_honk1, "s_honk1.ogg") ART(s_honk3, "s_honk3.ogg")
+ART(s_honk1, "s_honk1.ogg") ART(s_honk3, "s_honk3.ogg") ART(s_wolf, "s_wolf.ogg")
 static Snd tick, tock, bwip, lid_up, lid_down, boing, big_boing, pop, whoosh, twinkle, wolf, wah, honk, honk2;
 static void make_sounds(void)
 {
     uint64_t keep = seed_state;
     seed_state = 0x50D5ULL;
     tick = make_tick(2600, 90); tock = make_tick(1900, 90);
-    static const double UP[] = {700, 1500}, DOWN[] = {1500, 600}, LID[] = {500, 1300, 1900}, LIDD[] = {1900, 900, 450},
-                        WOLF[] = {800, 2300, 2300, 700, 2500, 900};
+    static const double UP[] = {700, 1500}, DOWN[] = {1500, 600}, LID[] = {500, 1300, 1900}, LIDD[] = {1900, 900, 450};
     bwip = make_slide(UP, 2, 0.14);
     lid_up = make_slide(LID, 3, 0.42); lid_down = make_slide(LIDD, 3, 0.38);
     boing = make_boing(150, 0.75); big_boing = make_boing(95, 1.2);
     pop = make_pop(); whoosh = make_whoosh(0.55); twinkle = make_twinkle(); wah = make_wah();
-    wolf = make_slide(WOLF, 6, 0.95);
-    for (int i = (int)(0.22 * RATE); i < (int)(0.34 * RATE) && i < wolf.n; i++) wolf.s[i] *= 0.05;   /* the breath between */
+    wolf = decode(art_s_wolf, art_s_wolf_end);                /* a real one: "Wolf whistle.ogg", Commons, public domain */
     (void)DOWN;
     honk = decode(art_s_honk1, art_s_honk1_end); honk2 = decode(art_s_honk3, art_s_honk3_end);
     seed_state = keep;
