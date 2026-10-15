@@ -54,6 +54,62 @@ Most of the noises are made in code. Two are recordings: the wolf whistle is
 (Wikimedia Commons, public domain), and Harpo's horn is from public-domain media,
 as in [Duck Soup](https://github.com/mottipython/duck-soup).
 
+## Install
+
+Packages are on the [releases page](../../releases).
+
+### Windows
+
+For Windows 10 or 11, step by step:
+
+1. [**Download Groucho Time**](https://github.com/mottipython/groucho-time/releases/latest/download/GrouchoTime-Setup-1.0.0.exe).
+2. If the browser says the file "isn't commonly downloaded" or "could harm your
+   device", click the **⋯** (or **^**) beside it and choose **Keep**, then **Keep
+   anyway**.
+3. Open the downloaded file (click it at the top or bottom of the browser, or find
+   it in the **Downloads** folder).
+4. A blue box may say **"Windows protected your PC"**. Click **More info**, then
+   **Run anyway**. (It says this because the program isn't signed with a paid
+   certificate, not because anything is wrong with it.)
+5. Windows asks **"Do you want to allow this app to make changes?"** Click **Yes**.
+   (Windows only lists screen savers kept in its own system folder.)
+6. Click **Next**, then **Install**, then **Finish**. The Screen Saver Settings open
+   with "Groucho Time" already chosen. Click **OK**.
+
+It comes on by itself when the computer has been left alone. To pick a different
+one later, type **screen saver** in the Start menu search and open **Change screen
+saver**. To remove it, open **Settings**, **Apps**, find it in the list and choose
+**Uninstall**.
+
+### macOS
+
+For Apple Silicon and Intel, macOS 11 or later. Paste this into Terminal; it installs
+the screen saver for your user and opens the Screen Saver settings:
+
+    curl -fsSL https://raw.githubusercontent.com/mottipython/marx-screensavers/main/tools/mac-install.sh | sh -s -- groucho-time
+
+Or download the file ending `-mac-screensaver.zip` from the releases page, unzip it
+and double-click the `.saver` file. It is not signed with an Apple developer
+certificate, so macOS will refuse it at first: open System Settings, Privacy &
+Security, and click Open Anyway.
+
+### Linux
+
+**Fedora, Nobara** (built on Fedora 44):
+
+    sudo dnf install ./groucho-time-1.0.0-1.fc44.x86_64.rpm
+
+**Debian, Ubuntu, Mint** (Ubuntu 24.04 / Debian 13 or later):
+
+    sudo apt install ./groucho-time_1.0.0_amd64.deb
+
+From your next login it starts by itself after five minutes idle on Wayland desktops
+that provide ext-idle-notify (KDE Plasma, Sway, Hyprland, niri, COSMIC, labwc and
+others), and any key or mouse movement ends it. `groucho-time-screensaver` changes the
+delay or turns it off. If
+[screensaver-service](https://github.com/mottipython/screensaver-service) is
+installed, it appears in its list instead.
+
 ## Running it yourself
 
     groucho-time                  full screen on every display
