@@ -16,7 +16,7 @@ Groucho Marx's head pasted on. Runs on Linux, Windows and macOS. One of the
 - **Every quarter of an hour** the top of his head flips open on its hinge, and one of
   his own lines comes up out of it on a coiled spring: 51 of them, from *The
   Cocoanuts* to *A Day at the Races*, each with the film it is from.
-- **Harpo is the sphinx**, silent, and now and then his head goes over to one side.
+- **Harpo is the sphinx**, silent, his head now and then going over to one side, and his eyes never still: darting from side to side, glaring from under his lids, sliding slowly round, rolling, popping out in a glazed stare, or crossed in his "gookie". When Raquel Torres passes, they lock on her.
 - **Now and then** Gummo, Chico or Zeppo peeks out from behind the clock.
 - **About every minute and a half** something happens: his head spins round and comes up as Zeppo's; Margaret Dumont sweeps in and he waggles his eyebrows at her; Raquel Torres glides past and his head floats off after her in a cloud of paper hearts; the top of his head opens and Chico pops out on a spring; or Harpo's head goes up out of the sphinx on a spring.
 
@@ -62,7 +62,7 @@ Packages are on the [releases page](../../releases).
 
 For Windows 10 or 11, step by step:
 
-1. [**Download Groucho Time**](https://github.com/mottipython/groucho-time/releases/latest/download/GrouchoTime-Setup-1.1.1.exe).
+1. [**Download Groucho Time**](https://github.com/mottipython/groucho-time/releases/latest/download/GrouchoTime-Setup-1.1.2.exe).
 2. If the browser says the file "isn't commonly downloaded" or "could harm your
    device", click the **⋯** (or **^**) beside it and choose **Keep**, then **Keep
    anyway**.
@@ -97,11 +97,11 @@ Security, and click Open Anyway.
 
 **Fedora, Nobara** (built on Fedora 44):
 
-    sudo dnf install ./groucho-time-1.1.1-1.fc44.x86_64.rpm
+    sudo dnf install ./groucho-time-1.1.2-1.fc44.x86_64.rpm
 
 **Debian, Ubuntu, Mint** (Ubuntu 24.04 / Debian 13 or later):
 
-    sudo apt install ./groucho-time_1.1.1_amd64.deb
+    sudo apt install ./groucho-time_1.1.2_amd64.deb
 
 From your next login it starts by itself after five minutes idle on Wayland desktops
 that provide ext-idle-notify (KDE Plasma, Sway, Hyprland, niri, COSMIC, labwc and
