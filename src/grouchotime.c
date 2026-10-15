@@ -235,6 +235,7 @@ static void update(double dt)
 {
     anim_t += dt * opt_speed;
     T = fmod(tod0 + anim_t, 86400);
+    void sound_step_(void); sound_step_();
     /* the screensaver may run for hours: read the real clock again now and then,
      * so that it never drifts */
     static double since;
@@ -485,6 +486,367 @@ static void saying_label(const Saying *sy, double x, double y, double up)
     for (int i = 0; i < n; i++) text(lines[i], cx, top + pad + i * lh, s, 1.1, ink);
     text(sy->film, cx, top + pad + (n - 1) * lh + s * 6 + fsz * 2.5, fsz, 1.0, red);
     flush(ren);
+}
+
+/* ---- sound ----
+ *
+ * Every noise is made here when the clock starts (Harpo's horn is decoded from a
+ * recording), and played when its moment comes round: each frame, the clock's time
+ * since the last frame is looked over, and any noise due in it is started. */
+#if defined(__GNUC__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-function"
+#pragma GCC diagnostic ignored "-Wunused-but-set-variable"
+#pragma GCC diagnostic ignored "-Wunused-value"
+#pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
+#endif
+#define STB_VORBIS_NO_STDIO
+#define STB_VORBIS_NO_PUSHDATA_API
+#include "stb_vorbis.c"
+#undef L
+#undef R
+#undef C
+#if defined(__GNUC__)
+#pragma GCC diagnostic pop
+#endif
+
+#define RATE 22050
+typedef struct { float *s; int n; } Snd;
+static Snd snd_new(double secs)
+{
+    Snd s;
+    s.n = (int)(secs * RATE);
+    s.s = calloc(s.n > 0 ? s.n : 1, sizeof *s.s);
+    return s;
+}
+static double nz(void) { return frand() * 2 - 1; }
+static void snd_norm(Snd *s, double peak)
+{
+    double m = 1e-9;
+    for (int i = 0; i < s->n; i++) m = fmax(m, fabs(s->s[i]));
+    for (int i = 0; i < s->n; i++) s->s[i] *= peak / m;
+}
+
+#if defined(__GNUC__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-function"   /* each clock uses only some of the noises */
+#endif
+/* a click and a short ring: the tick of a clock */
+static Snd make_tick(double f, double ring)
+{
+    Snd s = snd_new(0.08);
+    for (int i = 0; i < s.n; i++) {
+        double t = (double)i / RATE;
+        s.s[i] = nz() * exp(-t * 900) * 0.7 + sin(2 * M_PI * f * t) * exp(-t * ring) * 0.6;
+    }
+    snd_norm(&s, 1);
+    return s;
+}
+/* a whistle sliding through the frequencies in fs (evenly in time), as a swanee
+ * whistle does, with a little vibrato and breath */
+static Snd make_slide(const double *fs, int nf, double dur)
+{
+    Snd s = snd_new(dur);
+    double ph = 0;
+    for (int i = 0; i < s.n; i++) {
+        double t = (double)i / RATE, u = t / dur * (nf - 1);
+        int k = (int)fmin(u, nf - 2);
+        double fr = u - k, f = fs[k] * pow(fs[k + 1] / fs[k], fr);
+        f *= 1 + 0.02 * sin(2 * M_PI * 6 * t);
+        ph += 2 * M_PI * f / RATE;
+        double env = fmin(1, t / 0.02) * fmin(1, (dur - t) / 0.06);
+        s.s[i] = (sin(ph) + 0.15 * sin(2 * ph) + 0.04 * nz()) * env;
+    }
+    snd_norm(&s, 1);
+    return s;
+}
+/* a spring: a jaw-harp twang that wobbles down */
+static Snd make_boing(double base, double dur)
+{
+    Snd s = snd_new(dur);
+    double ph = 0;
+    for (int i = 0; i < s.n; i++) {
+        double t = (double)i / RATE;
+        double f = base * (1 + 0.7 * exp(-t * 7)) * (1 + 0.22 * sin(2 * M_PI * 13 * t) * exp(-t * 2.5));
+        ph += 2 * M_PI * f / RATE;
+        s.s[i] = (sin(ph) + 0.45 * sin(2 * ph) + 0.2 * sin(3 * ph)) * exp(-t * 3.2) * fmin(1, t / 0.004);
+    }
+    snd_norm(&s, 1);
+    return s;
+}
+/* a cork pop */
+static Snd make_pop(void)
+{
+    Snd s = snd_new(0.12);
+    double ph = 0;
+    for (int i = 0; i < s.n; i++) {
+        double t = (double)i / RATE, f = 120 + 1000 * exp(-t * 40);
+        ph += 2 * M_PI * f / RATE;
+        s.s[i] = sin(ph) * exp(-t * 35) + nz() * exp(-t * 600) * 0.5;
+    }
+    snd_norm(&s, 1);
+    return s;
+}
+/* air rushing past: noise through a band that sweeps up and down */
+static Snd make_whoosh(double dur)
+{
+    Snd s = snd_new(dur);
+    double lo = 0, hi = 0;
+    for (int i = 0; i < s.n; i++) {
+        double t = (double)i / RATE, q = t / dur, a = 0.02 + 0.25 * sin(M_PI * q);
+        double x = nz();
+        hi += (x - hi) * a; lo += (hi - lo) * a * 0.3;
+        double env = sin(M_PI * q); env *= env;
+        s.s[i] = (hi - lo) * env;
+    }
+    snd_norm(&s, 1);
+    return s;
+}
+/* a little run of bells, for love */
+static Snd make_twinkle(void)
+{
+    static const double NOTE[] = {2093, 2637, 3136, 4186, 3136, 4186};
+    Snd s = snd_new(1.1);
+    for (int k = 0; k < 6; k++) {
+        int at = (int)(k * 0.09 * RATE);
+        for (int i = 0; at + i < s.n; i++) {
+            double t = (double)i / RATE;
+            s.s[at + i] += (sin(2 * M_PI * NOTE[k] * t) + 0.3 * sin(2 * M_PI * NOTE[k] * 2.76 * t)) * exp(-t * 7) * 0.5;
+        }
+    }
+    snd_norm(&s, 1);
+    return s;
+}
+/* a trombone going wah, wah, wah, waaah */
+static Snd make_wah(void)
+{
+    static const double NOTE[] = {233, 220, 208, 185}, LEN[] = {0.3, 0.3, 0.3, 1.0};
+    Snd s = snd_new(2.0);
+    int at = 0;
+    double ph = 0;
+    for (int k = 0; k < 4; k++) {
+        int n = (int)(LEN[k] * RATE);
+        for (int i = 0; i < n && at + i < s.n; i++) {
+            double t = (double)i / RATE, u = t / LEN[k];
+            double f = NOTE[k] * (k == 3 ? 1 + 0.03 * sin(2 * M_PI * 5.5 * t) * fmin(1, t * 2) : 1);
+            ph += 2 * M_PI * f / RATE;
+            double bright = sin(M_PI * fmin(u * 1.4, 1)), v = 0;          /* the mute opening and closing */
+            for (int h = 1; h <= 9; h++) v += sin(h * ph) / h * exp(-h * (1.3 - 1.0 * bright));
+            double env = fmin(1, t / 0.03) * fmin(1, (LEN[k] - t) / 0.05);
+            s.s[at + i] += v * env;
+        }
+        at += n;
+    }
+    snd_norm(&s, 1);
+    return s;
+}
+/* a bell: the partials of a church bell, struck */
+static void add_bell(Snd *s, double at, double f, double gain)
+{
+    static const double P[] = {0.5, 1, 1.19, 1.5, 2, 2.5, 3}, A[] = {0.4, 1, 0.5, 0.35, 0.3, 0.15, 0.1};
+    int a = (int)(at * RATE);
+    for (int i = 0; a + i < s->n; i++) {
+        double t = (double)i / RATE, v = 0;
+        for (int p = 0; p < 7; p++) v += A[p] * sin(2 * M_PI * f * P[p] * t) * exp(-t * (1.2 + p * 0.9));
+        s->s[a + i] += v * gain * fmin(1, t / 0.002);
+    }
+}
+static Snd make_chime(void)
+{
+    Snd s = snd_new(2.6);
+    add_bell(&s, 0, 659.3, 1);
+    add_bell(&s, 0.55, 523.3, 1);
+    snd_norm(&s, 1);
+    return s;
+}
+/* a match struck, flaring and crackling */
+static Snd make_match(void)
+{
+    Snd s = snd_new(0.7);
+    double lo = 0;
+    for (int i = 0; i < s.n; i++) {
+        double t = (double)i / RATE, x = nz();
+        lo += (x - lo) * 0.35;
+        double strike = (x - lo) * exp(-t * 30) * 1.2;
+        double flare = lo * 0.5 * exp(-pow((t - 0.12) / 0.12, 2));
+        double crackle = (frand() < 0.004 ? nz() * 0.8 : 0) * exp(-t * 3);
+        s.s[i] = strike + flare + crackle;
+    }
+    snd_norm(&s, 1);
+    return s;
+}
+/* a soft puff of ash, or of smoke */
+static Snd make_pff(double dur)
+{
+    Snd s = snd_new(dur);
+    double lo = 0;
+    for (int i = 0; i < s.n; i++) {
+        double t = (double)i / RATE;
+        lo += (nz() - lo) * 0.12;
+        s.s[i] = lo * sin(M_PI * t / dur);
+    }
+    snd_norm(&s, 1);
+    return s;
+}
+/* a recording built into the program, decoded */
+static Snd decode(const unsigned char *a, const unsigned char *b)
+{
+    Snd s = {NULL, 0};
+    int ch, rate;
+    short *pcm;
+    int n = stb_vorbis_decode_memory(a, (int)(b - a), &ch, &rate, &pcm);
+    if (n <= 0) return snd_new(0.01);
+    s = snd_new((double)n / rate);
+    for (int i = 0; i < s.n; i++) {
+        double src = (double)i * rate / RATE;
+        int j = (int)src;
+        if (j + 1 >= n) break;
+        double fr = src - j;
+        s.s[i] = (pcm[j * ch] * (1 - fr) + pcm[(j + 1) * ch] * fr) / 32768.0;
+    }
+    free(pcm);
+    snd_norm(&s, 1);
+    return s;
+}
+
+#if defined(__GNUC__)
+#pragma GCC diagnostic pop
+#endif
+
+/* ---- the mixer ---- */
+typedef struct { const Snd *s; int pos; float gain; } Voice;
+static Voice voice[24];
+static SDL_AudioDeviceID audio_dev;
+static int audio_on, opt_mute;
+static const char *opt_wav;
+static void play(const Snd *s, double gain)
+{
+    if (!audio_on || !s->n) return;
+    if (audio_dev) SDL_LockAudioDevice(audio_dev);
+    for (int i = 0; i < 24; i++)
+        if (!voice[i].s) { voice[i] = (Voice){s, 0, (float)gain}; break; }
+    if (audio_dev) SDL_UnlockAudioDevice(audio_dev);
+}
+static void mix(short *out, int n)
+{
+    for (int k = 0; k < n; k++) {
+        float v = 0;
+        for (int i = 0; i < 24; i++) {
+            Voice *vc = &voice[i];
+            if (!vc->s) continue;
+            v += vc->s->s[vc->pos++] * vc->gain;
+            if (vc->pos >= vc->s->n) vc->s = NULL;
+        }
+        v = tanhf(v * 0.9f);                                 /* never harsh, however many at once */
+        out[k] = (short)(v * 30000);
+    }
+}
+static void audio_cb(void *u, Uint8 *stream, int len) { (void)u; mix((short *)stream, len / 2); }
+static void start_audio(void)
+{
+    SDL_AudioSpec want = {0}, got;
+    want.freq = RATE; want.format = AUDIO_S16SYS; want.channels = 1; want.samples = 1024; want.callback = audio_cb;
+    audio_dev = SDL_OpenAudioDevice(NULL, 0, &want, &got, 0);
+    if (!audio_dev) return;
+    audio_on = 1;
+    SDL_PauseAudioDevice(audio_dev, 0);
+}
+
+/* the clock's time last frame, and the noises due between then and now */
+static double last_T = -1;
+static void cues(double t0, double t1);
+static void make_sounds(void);
+void sound_step_(void)
+{
+    if (audio_on && last_T >= 0 && T > last_T && T - last_T < 2) cues(last_T, T);
+    last_T = T;
+}
+
+/* --wav FILE: the clock's sound for --time seconds from --clock, as a WAV file, to
+ * listen to without waiting for the moment */
+static int write_wav(double secs)
+{
+    make_sounds();
+    audio_on = 1;
+    start_show();
+    int n = (int)(secs * RATE), done = 0;
+    short *buf = calloc(n, sizeof *buf);
+    while (done < n) {
+        update(1.0 / 60);
+        int k = (int)fmin(RATE / 60, n - done);
+        mix(buf + done, k);
+        done += k;
+    }
+    FILE *f = fopen(opt_wav, "wb");
+    if (!f) return 1;
+    unsigned int data = n * 2, riff = 36 + data, rate = RATE, brate = RATE * 2, fmtlen = 16;
+    unsigned short pcm = 1, ch = 1, align = 2, bits = 16;
+    fwrite("RIFF", 1, 4, f); fwrite(&riff, 4, 1, f); fwrite("WAVEfmt ", 1, 8, f); fwrite(&fmtlen, 4, 1, f);
+    fwrite(&pcm, 2, 1, f); fwrite(&ch, 2, 1, f); fwrite(&rate, 4, 1, f); fwrite(&brate, 4, 1, f);
+    fwrite(&align, 2, 1, f); fwrite(&bits, 2, 1, f); fwrite("data", 1, 4, f); fwrite(&data, 4, 1, f);
+    fwrite(buf, 2, n, f);
+    fclose(f);
+    printf("%s: %.1f s\n", opt_wav, secs);
+    return 0;
+}
+
+/* ---- Groucho Time's noises: a cartoon's ---- */
+ART(s_honk1, "s_honk1.ogg") ART(s_honk3, "s_honk3.ogg")
+static Snd tick, tock, bwip, lid_up, lid_down, boing, big_boing, pop, whoosh, twinkle, wolf, wah, honk, honk2;
+static void make_sounds(void)
+{
+    uint64_t keep = seed_state;
+    seed_state = 0x50D5ULL;
+    tick = make_tick(2600, 90); tock = make_tick(1900, 90);
+    static const double UP[] = {700, 1500}, DOWN[] = {1500, 600}, LID[] = {500, 1300, 1900}, LIDD[] = {1900, 900, 450},
+                        WOLF[] = {800, 2300, 2300, 700, 2500, 900};
+    bwip = make_slide(UP, 2, 0.14);
+    lid_up = make_slide(LID, 3, 0.42); lid_down = make_slide(LIDD, 3, 0.38);
+    boing = make_boing(150, 0.75); big_boing = make_boing(95, 1.2);
+    pop = make_pop(); whoosh = make_whoosh(0.55); twinkle = make_twinkle(); wah = make_wah();
+    wolf = make_slide(WOLF, 6, 0.95);
+    for (int i = (int)(0.22 * RATE); i < (int)(0.34 * RATE) && i < wolf.n; i++) wolf.s[i] *= 0.05;   /* the breath between */
+    (void)DOWN;
+    honk = decode(art_s_honk1, art_s_honk1_end); honk2 = decode(art_s_honk3, art_s_honk3_end);
+    seed_state = keep;
+}
+static void cues(double t0, double t1)
+{
+    /* tick, tock */
+    for (double s = floor(t0) + 1; s <= t1; s++) play(((long)s & 1) ? &tock : &tick, 0.16);
+    /* the eyebrows going up as each minute begins */
+    if (floor(t1 / 60) > floor(t0 / 60)) play(&bwip, 0.22);
+    /* the quarter hour: the lid of his head, the spring, the lid again */
+    double q0 = fmod(t0, QUARTER), q1 = fmod(t1, QUARTER);
+    if (q1 < q0) q0 = -1;
+    #define QDUE(x) ((x) > q0 && (x) <= q1)
+    if (QDUE(0.2)) { play(&pop, 0.45); play(&lid_up, 0.35); }
+    if (QDUE(0.75)) play(&big_boing, 0.6);
+    if (QDUE(CARD_LEN + 0.6)) play(&lid_down, 0.35);
+    if (QDUE(CARD_LEN + 2.1)) play(&pop, 0.3);
+    /* the business in between, at its moments */
+    double u0 = -1, u1 = -1, ua;
+    int e1 = event_at(t1, &u1), e0 = event_at(t0, &ua);
+    if (e0 == e1) u0 = ua;
+    #define AT(k, f) (e1 == (k) && (f) > u0 && (f) <= u1)
+    if (AT(EV_ZEPPO, 0.0) || AT(EV_ZEPPO, 0.7)) play(&whoosh, 0.55);
+    if (AT(EV_ZEPPO, 0.3)) play(&pop, 0.3);
+    if (AT(EV_DUMONT, 0.05)) play(&whoosh, 0.3);
+    if (AT(EV_DUMONT, 0.25)) play(&wah, 0.5);
+    if (AT(EV_TORRES, 0.22)) play(&wolf, 0.4);
+    if (AT(EV_TORRES, 0.42)) play(&twinkle, 0.35);
+    if (AT(EV_CHICO, 0.0)) play(&lid_up, 0.3);
+    if (AT(EV_CHICO, 0.15)) play(&pop, 0.5);
+    if (AT(EV_CHICO, 0.3)) play(&boing, 0.55);
+    if (AT(EV_CHICO, 0.85)) play(&lid_down, 0.3);
+    if (AT(EV_HARPO, 0.02)) play(&boing, 0.6);
+    if (AT(EV_HARPO, 0.38)) play(&honk, 0.65);
+    #undef AT
+    #undef QDUE
+    /* a brother peeking in */
+    double gq0, gq1; int f0, f1;
+    if (e1 < 0 && gummo_at(t1, &gq1, &f1) && !gummo_at(t0, &gq0, &f0)) play(&pop, 0.3);
+    if (e1 < 0 && gummo_at(t1, &gq1, &f1) && peeker(t1) == PEEK_GUMMO && f1 && gummo_at(t0, &gq0, &f0) && !f0) play(&honk2, 0.25);
 }
 
 static void draw_scene(SDL_Renderer *r, int w, int h)
@@ -772,6 +1134,8 @@ static void usage(void)
         "Groucho Time screensaver\n\n"
         "  --window        run in a window (Esc or Q quits)\n"
         "  --clock HH:MM   start at that time of day instead of the real time\n"
+        "  --mute          no sound\n"
+        "  --wav FILE.wav  write the sound for --time seconds and exit\n"
         "  --speed X       how fast time goes, 1 = normal\n"
         "  --seed N        repeatable sequence\n"
         "  --snapshot FILE.bmp [--time SECONDS] [--size WxH]\n"
@@ -792,6 +1156,8 @@ int main(int argc, char **argv)
         else if (!strcmp(a, "--speed") && i + 1 < argc) opt_speed = SDL_atof(argv[++i]);
         else if (!strcmp(a, "--seed") && i + 1 < argc) opt_seed = SDL_strtoull(argv[++i], NULL, 10);
         else if (!strcmp(a, "--snapshot") && i + 1 < argc) opt_snapshot = argv[++i];
+        else if (!strcmp(a, "--mute")) opt_mute = 1;
+        else if (!strcmp(a, "--wav") && i + 1 < argc) opt_wav = argv[++i];
         else if (!strcmp(a, "--clock") && i + 1 < argc) {
             int hh = 0, mm = 0, ss = 0;
             if (sscanf(argv[++i], "%d:%d:%d", &hh, &mm, &ss) < 2) { usage(); return 1; }
@@ -808,9 +1174,10 @@ int main(int argc, char **argv)
     if (opt_speed < 0.05) opt_speed = 0.05;
     load_sprites();
 
+    if (opt_wav) return write_wav(opt_time);
     if (opt_snapshot) return snapshot();
     SDL_SetHint(SDL_HINT_VIDEO_ALLOW_SCREENSAVER, "1");
-    if (SDL_Init(SDL_INIT_VIDEO) != 0) { fprintf(stderr, "groucho-time: %s\n", SDL_GetError()); return 1; }
+    if (SDL_Init(SDL_INIT_VIDEO | (opt_mute ? 0 : SDL_INIT_AUDIO)) != 0) { fprintf(stderr, "groucho-time: %s\n", SDL_GetError()); return 1; }
 
     View views[8];
     int nviews = 0, ndisp = opt_window ? 1 : SDL_GetNumVideoDisplays();
@@ -820,6 +1187,7 @@ int main(int argc, char **argv)
     if (!nviews) { fprintf(stderr, "groucho-time: %s\n", SDL_GetError()); return 1; }
     if (!opt_window) SDL_ShowCursor(SDL_DISABLE);
     start_show();
+    if (!opt_mute) { make_sounds(); start_audio(); }
 
     Uint64 freqc = SDL_GetPerformanceFrequency(), last = SDL_GetPerformanceCounter(), start = last;
     double moved = 0;

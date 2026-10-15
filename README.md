@@ -51,6 +51,7 @@ All in the public domain.
 
     groucho-time                  full screen on every display
     groucho-time --window         in a window; Esc or Q quits
+    groucho-time --mute           without the sound
     groucho-time --clock 10:14:55 start at that time of day instead of the real time
     groucho-time --snapshot out.bmp --time 3 --size 1920x1080
 
