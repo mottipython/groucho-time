@@ -1131,6 +1131,7 @@ static void usage(void)
     SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_INFORMATION, "Groucho Time",
         "Groucho Time screensaver\n\n"
         "  --window        run in a window (Esc or Q quits)\n"
+        "  --settings      turn the sound on or off (also the Settings button)\n"
         "  --clock HH:MM   start at that time of day instead of the real time\n"
         "  --mute          no sound\n"
         "  --wav FILE.wav  write the sound for --time seconds and exit\n"
@@ -1140,6 +1141,54 @@ static void usage(void)
         "                  write a picture of the screensaver after SECONDS and exit\n", NULL);
 }
 
+/* ---- the one setting: sound on or off ----
+ * Kept in a little file in the user's own settings folder (on Linux in
+ * ~/.local/share/marx-screensavers/NAME, on Windows in AppData), and changed from the
+ * screen saver settings: Windows' Settings button (/c), or screensaver-service's
+ * (--settings). --mute still turns the sound off whatever it says. */
+#define SAVER_NAME "groucho-time"
+#define SAVER_TITLE "Groucho Time"
+static char *settings_file(void)
+{
+    char *dir = SDL_GetPrefPath("marx-screensavers", SAVER_NAME);
+    if (!dir) return NULL;
+    size_t n = strlen(dir) + 16;
+    char *p = malloc(n);
+    if (p) snprintf(p, n, "%ssettings.txt", dir);
+    SDL_free(dir);
+    return p;
+}
+static int sound_setting(void)                  /* 1: sound on (the default), 0: off */
+{
+    char *p = settings_file(), line[64];
+    int on = 1;
+    FILE *f = p ? fopen(p, "r") : NULL;
+    if (f) {
+        while (fgets(line, sizeof line, f))
+            if (!strncmp(line, "sound=", 6)) on = line[6] != '0';
+        fclose(f);
+    }
+    free(p);
+    return on;
+}
+static void settings_dialog(void)
+{
+    int on = sound_setting();
+    const SDL_MessageBoxButtonData buttons[] = {
+        {SDL_MESSAGEBOX_BUTTON_ESCAPEKEY_DEFAULT, 0, "Cancel"},
+        {on ? 0 : SDL_MESSAGEBOX_BUTTON_RETURNKEY_DEFAULT, 1, "Sound on"},
+        {on ? SDL_MESSAGEBOX_BUTTON_RETURNKEY_DEFAULT : 0, 2, "Sound off"},
+    };
+    const SDL_MessageBoxData box = {SDL_MESSAGEBOX_INFORMATION, NULL, SAVER_TITLE,
+        on ? "The sound is on." : "The sound is off.", 3, buttons, NULL};
+    int choice = 0;
+    if (SDL_ShowMessageBox(&box, &choice) != 0 || choice == 0) return;
+    char *p = settings_file();
+    FILE *f = p ? fopen(p, "w") : NULL;
+    if (f) { fprintf(f, "sound=%d\n", choice == 1); fclose(f); }
+    free(p);
+}
+
 int main(int argc, char **argv)
 {
     for (int i = 1; i < argc; i++) {
@@ -1147,9 +1196,10 @@ int main(int argc, char **argv)
         if ((a[0] == '/' || a[0] == '-') && (a[1] == 's' || a[1] == 'S') && !a[2]) continue;
         else if ((a[0] == '/' || a[0] == '-') && (a[1] == 'p' || a[1] == 'P') && (!a[2] || a[2] == ':')) return 0;
         else if ((a[0] == '/' || a[0] == '-') && (a[1] == 'c' || a[1] == 'C') && (!a[2] || a[2] == ':')) {
-            SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_INFORMATION, "Groucho Time", "Groucho Time screensaver has no settings.", NULL);
+            settings_dialog();
             return 0;
         }
+        else if (!strcmp(a, "--settings")) { settings_dialog(); return 0; }
         else if (!strcmp(a, "--window")) opt_window = 1;
         else if (!strcmp(a, "--speed") && i + 1 < argc) opt_speed = SDL_atof(argv[++i]);
         else if (!strcmp(a, "--seed") && i + 1 < argc) opt_seed = SDL_strtoull(argv[++i], NULL, 10);
@@ -1170,6 +1220,7 @@ int main(int argc, char **argv)
         else { usage(); return 1; }
     }
     if (opt_speed < 0.05) opt_speed = 0.05;
+    if (!opt_snapshot && !sound_setting()) opt_mute = 1;
     load_sprites();
 
     if (opt_wav) return write_wav(opt_time);

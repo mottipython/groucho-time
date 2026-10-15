@@ -1,5 +1,5 @@
 # Groucho Time - a cut-out screensaver clock: Groucho Marx as Father Time
-VERSION  := 1.0.0
+VERSION  := 1.1.0
 PREFIX   ?= /usr
 SYSCONFDIR ?= /etc
 DESTDIR  ?=
