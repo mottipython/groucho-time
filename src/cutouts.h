@@ -28,6 +28,14 @@
 #define PHOTO_CHIN_Y 745.0
 #define CHICO_CHIN_X 126.0
 #define CHICO_CHIN_Y 307.5
+#define HARPO_EYE_L_X 120.0
+#define HARPO_EYE_L_Y 244.0
+#define HARPO_EYE_L_RX 16.0
+#define HARPO_EYE_L_RY 9.0
+#define HARPO_EYE_R_X 210.0
+#define HARPO_EYE_R_Y 239.0
+#define HARPO_EYE_R_RX 15.0
+#define HARPO_EYE_R_RY 9.0
 #define HARPO_CHIN_X 186.0
 #define HARPO_CHIN_Y 383.5
 #define ZEPPO_CHIN_X 141.0

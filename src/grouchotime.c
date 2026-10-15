@@ -847,6 +847,37 @@ static void cues(double t0, double t1)
     if (e1 < 0 && gummo_at(t1, &gq1, &f1) && peeker(t1) == PEEK_GUMMO && f1 && gummo_at(t0, &gq0, &f0) && !f0) play(&honk2, 0.25);
 }
 
+/* Where Harpo's eyes are looking (-1 .. 1 across, -1 .. 1 up and down) and how far his
+ * lids are down (0 .. 1). They are never still for long: every so often (on a beat of
+ * EYE_BEAT seconds, at random) they dart somewhere new, to one side, the other, or at
+ * us, often with his lids half down in a glare; now and then they slide there slowly
+ * instead, which is creepier. They go to Raquel Torres, wide open, and roll round when
+ * his head comes up on its spring. */
+#define EYE_BEAT 0.35
+static void eye_target(long k, double *x, double *y, double *l)
+{
+    double a = hash01((uint64_t)k * 3 + 101), b = hash01((uint64_t)k * 3 + 102), c = hash01((uint64_t)k * 3 + 103);
+    *x = a < 0.3 ? -1 : a < 0.6 ? 1 : (a - 0.6) / 0.4 * 1.4 - 0.7;
+    *y = (b - 0.35) * 0.7;
+    *l = c < 0.45 ? 0.38 : 0;
+}
+static int eyes_move(long k) { return hash01((uint64_t)k * 5 + 77) < 0.4; }
+static void harpo_eyes(int ev, double ju, double *lx, double *ly, double *lid)
+{
+    long k = (long)floor(T / EYE_BEAT), k1 = k, k0;
+    while (k1 > k - 24 && !eyes_move(k1)) k1--;              /* when they last moved */
+    for (k0 = k1 - 1; k0 > k1 - 24 && !eyes_move(k0); k0--) ;
+    double x0, y0, l0, x1, y1, l1;
+    eye_target(k0, &x0, &y0, &l0);
+    eye_target(k1, &x1, &y1, &l1);
+    double since = T - k1 * EYE_BEAT, slow = hash01((uint64_t)k1 * 7 + 5) < 0.15 ? 0.9 : 0.07;
+    double q = ease(fmin(since / slow, 1)), ql = ease(fmin(since / 0.15, 1));
+    double x = x0 + (x1 - x0) * q, y = y0 + (y1 - y0) * q, l = l0 + (l1 - l0) * ql;
+    if (ev == EV_TORRES && ju > 0.1 && ju < 0.9) { x = -1; y = 0.2; l = 0; }
+    if (ev == EV_HARPO && ju < 0.85) { x = cos(ju * 20); y = sin(ju * 20); l = 0; }
+    *lx = x; *ly = y; *lid = l;
+}
+
 static void draw_scene(SDL_Renderer *r, int w, int h)
 {
     ren = r; sw = w; sh = h;
@@ -921,7 +952,8 @@ static void draw_scene(SDL_Renderer *r, int w, int h)
     hand(dx, dy, hp / 3600, dr * 1.42, dr * 0.05);
     flush(ren);
 
-    /* Harpo, as the sphinx: silent, and now and then his head goes over to one side */
+    /* Harpo, as the sphinx: silent, and now and then his head goes over to one side,
+     * while his eyes behind the holes in his face go where they please */
     {
         double hx, hy, tt = fmod(T, 23.0), tilt = 0;
         if (tt > 17) tilt = sin(M_PI * jerky(tt - 17) / 6) * 14;
@@ -937,7 +969,28 @@ static void draw_scene(SDL_Renderer *r, int w, int h)
             flush(ren);
             hy = top; tilt = sin(ju * 25) * 12;
         }
-        put(SP_harpo, hx, hy, HARPO_CHIN_X, HARPO_CHIN_Y, ms * 0.56, tilt, 1, 0);
+        double look_x, look_y, lid;
+        harpo_eyes(ev, ju, &look_x, &look_y, &lid);
+        double hsc = ms * 0.56, ra = tilt * M_PI / 180;
+        for (int e = 0; e < 2; e++) {
+            double ex = e ? HARPO_EYE_R_X : HARPO_EYE_L_X, ey = e ? HARPO_EYE_R_Y : HARPO_EYE_L_Y;
+            double rx = e ? HARPO_EYE_R_RX : HARPO_EYE_L_RX, ry = e ? HARPO_EYE_R_RY : HARPO_EYE_L_RY;
+            double dx = (ex - HARPO_CHIN_X) * hsc, dy = (ey - HARPO_CHIN_Y) * hsc;
+            double x = hx + dx * cos(ra) - dy * sin(ra), y = hy + dx * sin(ra) + dy * cos(ra);
+            disc(x, y, rx * hsc * 1.1, col((Rgb){236, 228, 210}, 1), col((Rgb){236, 228, 210}, 1));
+            flush(ren);
+            int ir = e ? SP_harpo_iris_r : SP_harpo_iris_l;
+            double ox = look_x * rx * 0.48, oy = look_y * ry * 0.4;
+            put(ir, x + (ox * cos(ra) - oy * sin(ra)) * hsc, y + (ox * sin(ra) + oy * cos(ra)) * hsc,
+                sprite[ir].w / 2.0, sprite[ir].h / 2.0, hsc, tilt, 1, 0);
+            if (lid > 0.01) {                                /* his lids, coming down */
+                double R = rx * hsc * 3, d = R + ry * hsc * (1 - 2 * lid);
+                flush(ren);
+                disc(x + d * sin(ra), y - d * cos(ra), R, col((Rgb){140, 129, 112}, 1), col((Rgb){140, 129, 112}, 1));
+            }
+        }
+        flush(ren);
+        put(SP_harpo, hx, hy, HARPO_CHIN_X, HARPO_CHIN_Y, hsc, tilt, 1, 0);
     }
 
     /* his eyes, behind the holes in his head: paper whites, and the irises going to

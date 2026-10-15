@@ -57,6 +57,10 @@ BROTHERS = {
                (1320, 3220), (1240, 3140), (1190, 3020), (1160, 2880)], (1420, 3240)),
 }
 SPHINX_CHIN = (1345, 955)
+# Harpo's eyes, in his finished cut-out's pixels: the openings (a little bigger than his
+# own, so his glances show from across the room) and his irises
+HARPO_EYES = {"harpo_eye_l": (120, 244, 16, 9), "harpo_eye_r": (210, 239, 15, 9)}
+HARPO_IRIS_R = 7
 
 # ---- the ladies, for the business in between: Raquel Torres (1930s studio
 # portrait) and Margaret Dumont (The Cocoanuts, 1929), both public domain ----
@@ -273,6 +277,17 @@ def brothers(defs):
         rgba = np.dstack([rgb, (m * 255).astype(np.uint8)])[b:d, a:c]
         half = np.asarray(Image.fromarray(rgba, "RGBA").resize(((c - a) // 2, (d - b) // 2), Image.LANCZOS))
         out = with_edge(pad(half, EDGE + 1))
+        if name == "harpo":                                  # his eyes: irises out, holes in
+            oh, ow = out.shape[:2]
+            yy, xx = np.mgrid[0:oh, 0:ow]
+            for eye, (ex, ey, rx, ry) in HARPO_EYES.items():
+                r = HARPO_IRIS_R
+                piece = out[ey - r:ey + r, ex - r:ex + r].copy()
+                cy, cx = np.mgrid[0:2 * r, 0:2 * r]
+                piece[..., 3] = np.where((cx - r + 0.5) ** 2 + (cy - r + 0.5) ** 2 < r * r, 255, 0)
+                save(piece, eye.replace("eye", "iris"))
+                out[((xx - ex) / rx) ** 2 + ((yy - ey) / ry) ** 2 < 1, 3] = 0
+                defs[eye.upper()] = (ex, ey, rx, ry)
         save(out, name)
         defs[name.upper() + "_CHIN"] = ((chin[0] - a) / 2 + EDGE + 1, (chin[1] - b) / 2 + EDGE + 1)
     defs["SPHINX_CHIN"] = SPHINX_CHIN
@@ -293,7 +308,7 @@ def write_lists(defs):
     for k, v in defs.items():
         for i, n in enumerate(v):
             suffix = "XYZW"[i] if len(v) > 2 else "XY"[i]
-            if k in ("EYE_L", "EYE_R"): suffix = ("X", "Y", "RX", "RY")[i]
+            if k.endswith(("EYE_L", "EYE_R")): suffix = ("X", "Y", "RX", "RY")[i]
             if k == "DIAL": suffix = ("X", "Y", "R")[i]
             if k == "MONUMENT": suffix = ("W", "H")[i]
             lines.append(f"#define {k}_{suffix} {n:.1f}")
