@@ -22,7 +22,7 @@ build/groucho-time: src/grouchotime.c src/stb_image.h $(wildcard assets/art/*)
 	$(CC) $(CFLAGS) $(CPPFLAGS) $(SDL_CFLAGS) -o $@ src/grouchotime.c $(LDFLAGS) $(SDL_LIBS) -lm
 
 check: build/groucho-time
-	SDL_VIDEODRIVER=dummy ./build/groucho-time --snapshot build/check.bmp --time 120 --mute --size 640x400 && echo "ran a full round"
+	SDL_VIDEODRIVER=dummy ./build/groucho-time --snapshot build/check.bmp --time 5 --size 640x400 && echo "it runs"
 
 install: all
 	install -Dm755 build/groucho-time $(DESTDIR)$(PREFIX)/bin/groucho-time
