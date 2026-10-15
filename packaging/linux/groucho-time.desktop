@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Groucho Time
+Comment=Groucho Marx as Father Time, a cut-out clock
+Exec=groucho-time --window
+Icon=groucho-time
+Categories=Game;
+Keywords=comedy;cut-out;Marx Brothers;music;screensaver;

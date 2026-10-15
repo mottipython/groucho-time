@@ -1,0 +1,17 @@
+Package: groucho-time
+Version: @VERSION@
+Section: games
+Priority: optional
+Architecture: @ARCH@
+Depends: libc6 (>= 2.38), libsdl2-2.0-0 (>= 2.0.18), swayidle
+Installed-Size: @SIZE@
+Maintainer: Motti Schleider <motti.schleider@gmail.com>
+Description: Groucho Time, a cut-out screensaver clock of Groucho Marx as Father Time
+ Groucho Time, a Monty Python style cut-out screensaver clock: Father Time, from
+ a nineteenth-century clock design, with Groucho Marx's head pasted on. The
+ hands go round the engraving's own dial, Groucho's eyes swivel to and fro with
+ the seconds, his eyebrows waggle every minute, and on the hour the top of his
+ head flips open with one of his lines. Now and then Gummo peeks in.
+ .
+ On Wayland desktops it starts by itself after five minutes idle.
+ groucho-time-screensaver changes the delay or turns it off.
